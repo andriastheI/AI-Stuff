@@ -238,7 +238,7 @@ fun Application.todoRoutes() {
             post {
                 try {
                     val body = call.receive<CreateTodo>()
-                    if (body.title.isEmpty()) {
+                    if (body.title.isBlank()) {
                         return@post call.respond(
                             HttpStatusCode.BadRequest,
                             mapOf("error" to "title is required and must not be blank")
@@ -276,7 +276,7 @@ fun Application.todoRoutes() {
                             mapOf("error" to "id must be a valid integer")
                         )
                     val body = call.receive<UpdateTodo>()
-                    if (body.title == null || body.description == null || body.completed == null) {
+                    if (body.title == null && body.description == null && body.completed == null) {
                         return@put call.respond(
                             HttpStatusCode.BadRequest,
                             mapOf("error" to "request body must contain at least one field")
@@ -288,7 +288,7 @@ fun Application.todoRoutes() {
                             ?: return@transaction null
                         Todos.update({ Todos.id eq id }) {
                             body.title?.let { t -> it[title] = t }
-                            body.description?.let { d -> it[description] = d }
+                            it[description] = body.description
                             body.completed?.let { c -> it[completed] = if (c) 1 else 0 }
                             it[updatedAt] = now
                         }

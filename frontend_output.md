@@ -11,7 +11,8 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.0"
+    "react-router-dom": "^6.22.0",
+    "prop-types": "^15.8.1"
   },
   "devDependencies": {
     "vite": "^5.0.0",
@@ -129,7 +130,6 @@ Exports one async function per API endpoint; each uses `fetch`, sets the correct
 ```jsx
 // FILE: frontend/src/components/TodoListPage.jsx
 import { useState, useEffect, useCallback } from 'react';
-import PropTypes from 'prop-types';
 import { getTodos } from '../services/api';
 import TodoForm from './TodoForm';
 import TodoList from './TodoList';
@@ -327,10 +327,26 @@ Controlled form for creating a new todo; calls `onCreated` after a successful PO
 ```
 Styles the creation form as a contained card with a clearly labelled submit button and disabled state.
 
+```js
+// FILE: frontend/src/propTypes.js
+import PropTypes from 'prop-types';
+
+export const TodoShape = PropTypes.shape({
+  id: PropTypes.number.isRequired,
+  title: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  completed: PropTypes.bool.isRequired,
+  createdAt: PropTypes.string.isRequired,
+  updatedAt: PropTypes.string.isRequired,
+});
+```
+Shared PropType shape for a single todo object, imported by `TodoList` and `TodoItem` to eliminate the duplicated shape definition.
+
 ```jsx
 // FILE: frontend/src/components/TodoList.jsx
 import PropTypes from 'prop-types';
 import TodoItem from './TodoItem';
+import { TodoShape } from '../propTypes';
 import styles from './TodoList.module.css';
 
 export default function TodoList({ todos, onDeleted, onToggled }) {
@@ -353,14 +369,7 @@ export default function TodoList({ todos, onDeleted, onToggled }) {
 }
 
 TodoList.propTypes = {
-  todos: PropTypes.arrayOf(PropTypes.shape({
-    id: PropTypes.number.isRequired,
-    title: PropTypes.string.isRequired,
-    description: PropTypes.string,
-    completed: PropTypes.bool.isRequired,
-    createdAt: PropTypes.string.isRequired,
-    updatedAt: PropTypes.string.isRequired,
-  })).isRequired,
+  todos: PropTypes.arrayOf(TodoShape).isRequired,
   onDeleted: PropTypes.func.isRequired,
   onToggled: PropTypes.func.isRequired,
 };
@@ -387,27 +396,33 @@ Removes default list styling and stacks items with a consistent gap.
 
 ```jsx
 // FILE: frontend/src/components/TodoItem.jsx
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Link } from 'react-router-dom';
 import { deleteTodo, updateTodo } from '../services/api';
+import { TodoShape } from '../propTypes';
 import styles from './TodoItem.module.css';
 
 export default function TodoItem({ todo, onDeleted, onToggled }) {
+  const [actionError, setActionError] = useState(null);
+
   async function handleDelete() {
+    setActionError(null);
     try {
       await deleteTodo(todo.id);
       onDeleted(todo.id);
     } catch (err) {
-      alert(err.message);
+      setActionError(err.message);
     }
   }
 
   async function handleToggle() {
+    setActionError(null);
     try {
       await updateTodo(todo.id, { completed: !todo.completed });
       onToggled(todo.id, !todo.completed);
     } catch (err) {
-      alert(err.message);
+      setActionError(err.message);
     }
   }
 
@@ -430,6 +445,7 @@ export default function TodoItem({ todo, onDeleted, onToggled }) {
         <p className={styles.meta}>
           Created: {new Date(todo.createdAt).toLocaleString()}
         </p>
+        {actionError && <p className={styles.actionError}>{actionError}</p>}
       </div>
       <button className={styles.deleteBtn} onClick={handleDelete} aria-label="Delete todo">
         Delete
@@ -439,14 +455,7 @@ export default function TodoItem({ todo, onDeleted, onToggled }) {
 }
 
 TodoItem.propTypes = {
-  todo: PropTypes.shape({
-    id: PropTypes.number.isRequired,
-    title: PropTypes.string.isRequired,
-    description: PropTypes.string,
-    completed: PropTypes.bool.isRequired,
-    createdAt: PropTypes.string.isRequired,
-    updatedAt: PropTypes.string.isRequired,
-  }).isRequired,
+  todo: TodoShape.isRequired,
   onDeleted: PropTypes.func.isRequired,
   onToggled: PropTypes.func.isRequired,
 };
@@ -517,6 +526,12 @@ Displays a single todo with a completion checkbox, a link to its detail page, an
 .deleteBtn:hover {
   background: #dc2626;
 }
+
+.actionError {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: #c0392b;
+}
 ```
 Styles each todo as a card row with a muted appearance when completed and a red delete button.
 
@@ -555,7 +570,7 @@ export default function TodoDetailPage() {
     }
   }
 
-  if (loading) return <p className={styles.status}>Loading...</p>;
+  if (loading) return <p className={styles.loading}>Loading...</p>;
   if (error) return <p className={styles.error}>{error}</p>;
 
   return (
@@ -617,6 +632,12 @@ Fetches a single todo by URL param on mount, renders its details and an inline e
   margin-bottom: 0.5rem;
 }
 
+.loading {
+  padding: 2rem;
+  text-align: center;
+  color: #555;
+}
+
 .status {
   margin-bottom: 0.5rem;
 }
@@ -650,7 +671,7 @@ Styles the detail page with a back link, readable type hierarchy, and a destruct
 
 ```jsx
 // FILE: frontend/src/components/TodoEditForm.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { updateTodo } from '../services/api';
 import styles from './TodoEditForm.module.css';
@@ -662,6 +683,8 @@ export default function TodoEditForm({ todo, onUpdated }) {
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setSaved(false); }, [todo.id]);
 
   async function handleSubmit(e) {
     e.preventDefault();
