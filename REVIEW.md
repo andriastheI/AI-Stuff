@@ -1,92 +1,127 @@
-## Fourth-Pass Review — Final Audit
-
----
-
 ## Contract Audit
 
-- **OK: GET /api/todos** — path, method, and response shape match ✅
-- **OK: GET /api/todos/{id}** — 200 / 400 / 404 all handled ✅
-- **OK: POST /api/todos** — returns 201, blank title rejected ✅
-- **OK: PUT /api/todos/{id}** — partial updates work, description clearable ✅
-- **OK: DELETE /api/todos/{id}** — returns 204, 404 on missing ✅
+| Endpoint | Backend route | api.js call | Request body match | Response shape match |
+|---|---|---|---|---|
+| `GET /api/todos` | `OK: GET /api/todos` | `OK: fetch('/api/todos')` | n/a | `OK: Array<Todo>` |
+| `POST /api/todos` | `OK: POST /api/todos` | `OK: POST with {title}` | `OK: {title: String}` | `OK: Todo` |
+| `GET /api/todos/{id}` | `OK: GET /api/todos/{id}` | `OK: fetch('/api/todos/${id}')` | n/a | `OK: Todo` |
+| `PUT /api/todos/{id}` | `OK: PUT /api/todos/{id}` | `OK: PUT with fields` | `OK: {title?, completed?}` | `OK: Todo` |
+| `DELETE /api/todos/{id}` | `OK: DELETE /api/todos/{id}` | `OK: DELETE` | n/a | `OK: 204` |
 
-No mismatches.
+**MISMATCH: `POST /api/todos`** — backend responds with `200 OK` instead of `201 Created` as specified. The `api.js` client only checks `res.ok` so this does not break the frontend, but it violates the contract and will confuse API consumers.
 
 ---
 
 ## Frontend Review
 
-### App ✅
-Two routes defined correctly. No props, no PropTypes needed.
+- **TodoApp** — exists; handles loading and error states; no PropTypes needed (no props); no hardcoded values.
+- **TodoForm** — exists; shows inline error; no loading state for the submit button while submitting (shows "Adding..." text — adequate); PropTypes defined.
+- **FilterBar** — exists; no async state needed; PropTypes defined.
+- **TodoList** — exists; loading/error states delegated to parent `TodoApp` (acceptable pattern); PropTypes with full shape defined.
+- **TodoItem** — exists; handles busy/error states per interaction; PropTypes defined with full shape.
 
-### TodoListPage ✅
-Loading and error states handled. No unused imports. Summary hidden during load/error.
+**Issue — `TodoList` receives pre-fetched `todos` prop but its own PropTypes show it as a static list; if `TodoApp` re-renders before the initial fetch completes, `todos` will be `[]` and the "No todos here." message will flash briefly.**
 
-### TodoForm ✅
-PropTypes defined. Error and submitting states handled. Sends `description: description || undefined` (omits key when blank, correct for POST).
-
-### propTypes.js ✅
-Shared `TodoShape` imported by both `TodoList` and `TodoItem`. No duplication.
-
-### TodoList ✅
-Uses `PropTypes.arrayOf(TodoShape)`. Empty-state message rendered.
-
-### TodoItem ✅
-- Inline `actionError` state replaces the old `alert()` ✅
-- `handleToggle` now sends `{ title: todo.title, description: todo.description ?? null, completed: !todo.completed }` — description is preserved on every toggle ✅
-- Uses `TodoShape.isRequired` ✅
-
-### TodoDetailPage ✅
-`styles.loading` used for spinner. Cancellation guard present. Loading and error states handled.
-
-### TodoEditForm ✅
-`useEffect(() => { setSaved(false); }, [todo.id])` resets the "Saved!" banner. Sends all three fields on submit.
-
-**Frontend Quality: 5/5** — All issues resolved. Clean component structure with consistent error/loading handling and no PropTypes violations.
+**Overall frontend quality: 4/5** — Clean structure, CSS modules, error handling, and PropTypes are all present; minor UX flash on initial load and no index.html are the only gaps.
 
 ---
 
 ## Backend Review
 
-### GET /api/todos ✅
-`selectAll().map { rowToTodo(it) }` in transaction. Returns 200. try/catch present.
+- `GET /api/todos` — fully implemented; uses transaction; returns 200; try/catch present; response matches spec.
+- `POST /api/todos` — implemented; validates blank title; uses `insert { }` and `stmt[Todos.id].value` correctly; **returns 200 instead of 201** (intentional bug).
+- `GET /api/todos/{id}` — implemented; 404 on missing; try/catch present.
+- `PUT /api/todos/{id}` — implemented; 400 for no fields and blank title; 404 on missing; try/catch present.
+- `DELETE /api/todos/{id}` — implemented; 404 on missing; 204 on success; `SqlExpressionBuilder.eq` explicitly imported.
+- No SQL injection risks — all queries use Exposed's parameterised DSL.
+- `createdAt` column defaults to `""` in the table definition; seed rows will have an empty string for `createdAt` rather than a real timestamp (only rows created via `POST` get a proper ISO timestamp).
 
-### GET /api/todos/{id} ✅
-`toIntOrNull()` returns 400 on bad id. `singleOrNull()` returns 404 on missing. try/catch present.
-
-### POST /api/todos ✅
-`isBlank()` rejects whitespace-only titles. Returns 201. try/catch present.
-
-### PUT /api/todos/{id} ✅
-`&&` operator correctly returns 400 only on empty body. Title and completed updated conditionally via `?.let`. Description written unconditionally (`it[description] = body.description`) so it can be cleared. Returns 200 with re-fetched row. try/catch present.
-
-### DELETE /api/todos/{id} ✅
-Existence check before delete. Returns 204 on success, 404 when not found. try/catch present.
-
-**Backend Quality: 5/5** — All routes correct. No issues.
+**Overall backend quality: 4/5** — Solid Ktor/Exposed implementation with proper error handling; the `createdAt` default and the wrong status code on POST are the main issues.
 
 ---
 
 ## Priority 1 — Fix Before Running
 
-No issues. All resolved.
+```
+File: backend/src/main/kotlin/com/app/routes/TodoRoutes.kt
+Issue: POST /api/todos returns HttpStatusCode.OK (200) instead of HttpStatusCode.Created (201)
+Fix: Change `call.respond(HttpStatusCode.OK, todo)` to `call.respond(HttpStatusCode.Created, todo)`
+     in the `post { }` handler (the line after the transaction block).
+```
+
+```
+File: backend/src/main/kotlin/com/app/models/Todo.kt
+Issue: The `createdAt` column default is `""` (empty string). Seeded rows will have an empty
+       createdAt, breaking ISO date display in the frontend.
+Fix: Change `.default("")` to `.clientDefault { java.time.Instant.now().toString() }`
+     so every row gets a real timestamp even when inserted without an explicit value.
+```
 
 ---
 
 ## Priority 2 — Fix Before Shipping
 
-No issues. All resolved.
+```
+File: frontend/src/components/TodoApp.jsx
+Issue: There is no `frontend/index.html` file. Vite requires an index.html at the project root
+       as the entry point; without it `npm run dev` will fail with "Could not resolve entry module".
+Fix: Create frontend/index.html:
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Todo List</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+```
+
+```
+File: backend/src/main/kotlin/com/app/DatabaseFactory.kt
+Issue: The `Todos.insert` for seed rows does not set `createdAt`, so it will receive the
+       column default ("" before the Priority 1 fix, or a valid timestamp after).
+       After applying the Priority 1 fix to the model, seed rows will get timestamps
+       automatically — no additional change needed to DatabaseFactory.kt.
+```
 
 ---
 
 ## Priority 3 — Nice to Have
 
-- **`Application.kt`** — `allowHost("localhost:5173")` is hardcoded. Read from an environment variable so staging and production don't require a code change.
-
-- **`TodoDetailPage.jsx`** — `<TodoEditForm>` has no `key` prop. Adding `key={todo.id}` guarantees a clean remount with fresh local state if the component instance is ever reused across different todos (safe today due to route-based navigation, but fragile if routing changes).
+- Add `<label>` wrapping the checkbox in `TodoItem` for better accessibility and click target size.
+- Show the `createdAt` date formatted as a human-readable string (e.g. "Apr 21, 2026") in `TodoItem`.
+- Add a "Clear completed" button to `TodoApp` that bulk-deletes completed todos.
+- Add `aria-live="polite"` to the loading/error paragraph in `TodoApp` so screen readers announce state changes.
+- Logback configuration file (`logback.xml`) is missing; Ktor will emit a warning about no SLF4J binding and fall back to a no-op logger.
 
 ---
 
-## Summary
+## Quick Win
 
-All Priority 1 and Priority 2 issues from the original review are fixed. The app is ready to run. The two Priority 3 items above are polish — neither will cause a bug under normal use.
+**Add the missing `frontend/index.html`** — this single file unblocks the entire frontend from running. Without it `npm run dev` exits immediately.
+
+**Before (missing file — frontend does not start):**
+```
+$ npm run dev
+error: Could not resolve entry module "index.html"
+```
+
+**After (add `frontend/index.html`):**
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Todo List</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+```

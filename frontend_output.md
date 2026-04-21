@@ -1,7 +1,7 @@
 ```json
 // FILE: frontend/package.json
 {
-  "name": "todo-frontend",
+  "name": "todo-list-frontend",
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",
@@ -11,40 +11,42 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.0",
-    "prop-types": "^15.8.1"
+    "react-router-dom": "^6.22.0"
   },
   "devDependencies": {
-    "vite": "^5.0.0",
-    "@vitejs/plugin-react": "^4.2.0"
+    "vite": "^5.1.0",
+    "@vitejs/plugin-react": "^4.2.1"
   }
 }
 ```
-Defines the project name, scripts, and all runtime and dev dependencies needed to build and run the Vite + React app.
+Defines the project metadata, run scripts, and dependencies for the React + Vite frontend.
 
-```js
+```javascript
 // FILE: frontend/vite.config.js
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
-});
+})
 ```
-Registers the React plugin and proxies all `/api` requests to the backend at port 3001, eliminating CORS errors during local development.
+Configures Vite with the React plugin and proxies all `/api` requests to the Ktor backend on port 3001 to avoid CORS issues in development.
 
 ```jsx
 // FILE: frontend/src/main.jsx
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import App from './App';
-import './index.css';
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App'
+import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -52,329 +54,369 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <App />
     </BrowserRouter>
   </React.StrictMode>
-);
+)
 ```
-Entry point that mounts the React app inside a `BrowserRouter` so all route-aware components have access to routing context.
+Entry point that mounts the React app inside a `BrowserRouter` for client-side routing.
 
 ```jsx
 // FILE: frontend/src/App.jsx
-import { Routes, Route } from 'react-router-dom';
-import TodoListPage from './components/TodoListPage';
-import TodoDetailPage from './components/TodoDetailPage';
+import React from 'react'
+import { Routes, Route } from 'react-router-dom'
+import TodoApp from './components/TodoApp'
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<TodoListPage />} />
-      <Route path="/todos/:id" element={<TodoDetailPage />} />
+      <Route path="/" element={<TodoApp />} />
     </Routes>
-  );
+  )
 }
 ```
-Defines the two top-level routes: the list page at `/` and the detail page at `/todos/:id`.
+Defines the single route `/` mapping to the `TodoApp` page component.
 
-```js
+```javascript
 // FILE: frontend/src/services/api.js
 
-// GET /api/todos — retrieves all todo items
+// GET /api/todos — fetches all todo items, returns array
 export async function getTodos() {
-  const res = await fetch('/api/todos');
-  if (!res.ok) throw new Error(`Failed to fetch todos: ${res.status}`);
-  return res.json();
-}
-
-// GET /api/todos/{id} — retrieves a single todo by id
-export async function getTodo(id) {
-  const res = await fetch(`/api/todos/${id}`);
-  if (res.status === 404) throw new Error('Todo not found');
-  if (res.status === 400) throw new Error('Invalid todo id');
-  if (!res.ok) throw new Error(`Failed to fetch todo ${id}: ${res.status}`);
-  return res.json();
+  const res = await fetch('/api/todos')
+  if (!res.ok) throw new Error(`Failed to fetch todos: ${res.status}`)
+  return res.json()
 }
 
 // POST /api/todos — creates a new todo, returns the created object
-export async function createTodo(data) {
+export async function createTodo(title) {
   const res = await fetch('/api/todos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (res.status === 400) throw new Error('Title is required and must not be blank');
-  if (!res.ok) throw new Error(`Failed to create todo: ${res.status}`);
-  return res.json();
+    body: JSON.stringify({ title }),
+  })
+  if (!res.ok) throw new Error(`Failed to create todo: ${res.status}`)
+  return res.json()
 }
 
-// PUT /api/todos/{id} — updates an existing todo, returns the updated object
-export async function updateTodo(id, data) {
+// GET /api/todos/:id — fetches a single todo by id
+export async function getTodoById(id) {
+  const res = await fetch(`/api/todos/${id}`)
+  if (!res.ok) throw new Error(`Failed to fetch todo ${id}: ${res.status}`)
+  return res.json()
+}
+
+// PUT /api/todos/:id — updates a todo (title and/or completed), returns updated object
+export async function updateTodo(id, fields) {
   const res = await fetch(`/api/todos/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (res.status === 404) throw new Error('Todo not found');
-  if (res.status === 400) throw new Error('Invalid request: check id and body');
-  if (!res.ok) throw new Error(`Failed to update todo ${id}: ${res.status}`);
-  return res.json();
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) throw new Error(`Failed to update todo ${id}: ${res.status}`)
+  return res.json()
 }
 
-// DELETE /api/todos/{id} — deletes a todo by id, returns nothing on success
+// DELETE /api/todos/:id — deletes a todo, returns nothing (204)
 export async function deleteTodo(id) {
-  const res = await fetch(`/api/todos/${id}`, { method: 'DELETE' });
-  if (res.status === 404) throw new Error('Todo not found');
-  if (res.status === 400) throw new Error('Invalid todo id');
-  if (!res.ok) throw new Error(`Failed to delete todo ${id}: ${res.status}`);
+  const res = await fetch(`/api/todos/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Failed to delete todo ${id}: ${res.status}`)
 }
 ```
-Exports one async function per API endpoint; each uses `fetch`, sets the correct method and headers, and throws descriptive errors on non-2xx responses.
+Exports one async function per API endpoint; each function throws a descriptive `Error` on non-2xx responses.
 
 ```jsx
-// FILE: frontend/src/components/TodoListPage.jsx
-import { useState, useEffect, useCallback } from 'react';
-import { getTodos } from '../services/api';
-import TodoForm from './TodoForm';
-import TodoList from './TodoList';
-import styles from './TodoListPage.module.css';
+// FILE: frontend/src/components/TodoApp.jsx
+import React, { useState, useEffect } from 'react'
+import TodoForm from './TodoForm'
+import FilterBar from './FilterBar'
+import TodoList from './TodoList'
+import { getTodos } from '../services/api'
+import styles from './TodoApp.module.css'
 
-export default function TodoListPage() {
-  const [todos, setTodos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+export default function TodoApp() {
+  const [todos, setTodos] = useState([])
+  const [filter, setFilter] = useState('All')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const fetchTodos = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getTodos();
-      setTodos(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useEffect(() => {
+    getTodos()
+      .then(setTodos)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [])
 
-  useEffect(() => { fetchTodos(); }, [fetchTodos]);
+  function handleCreated(todo) {
+    setTodos((prev) => [...prev, todo])
+  }
 
-  const completedCount = todos.filter(t => t.completed).length;
+  function handleToggle(updatedTodo) {
+    setTodos((prev) =>
+      prev.map((t) => (t.id === updatedTodo.id ? updatedTodo : t))
+    )
+  }
+
+  function handleDelete(id) {
+    setTodos((prev) => prev.filter((t) => t.id !== id))
+  }
 
   return (
-    <div className={styles.page}>
-      <h1 className={styles.heading}>Todos</h1>
-      {!loading && !error && (
-        <p className={styles.summary}>
-          {todos.length} total &mdash; {completedCount} completed
-        </p>
-      )}
-      <TodoForm onCreated={fetchTodos} />
-      {loading && <p>Loading...</p>}
-      {error && <p className={styles.error}>{error}</p>}
+    <div className={styles.container}>
+      <h1 className={styles.heading}>Todo List</h1>
+      <TodoForm onCreated={handleCreated} />
+      <FilterBar filter={filter} onFilterChange={setFilter} />
+      {loading && <p className={styles.status}>Loading...</p>}
+      {error && <p className={styles.error}>Error: {error}</p>}
       {!loading && !error && (
         <TodoList
           todos={todos}
-          onDeleted={fetchTodos}
-          onToggled={fetchTodos}
+          filter={filter}
+          onToggle={handleToggle}
+          onDelete={handleDelete}
         />
       )}
     </div>
-  );
+  )
 }
 ```
-Fetches the full todo list on mount, shows a count/completion summary, and re-fetches after any create, delete, or toggle action.
+Top-level page component that owns the todo state, fetches data on mount, and passes callbacks to children.
 
 ```css
-/* FILE: frontend/src/components/TodoListPage.module.css */
-.page {
-  max-width: 640px;
-  margin: 2rem auto;
-  padding: 0 1rem;
+/* FILE: frontend/src/components/TodoApp.module.css */
+.container {
+  max-width: 600px;
+  margin: 40px auto;
+  padding: 0 16px;
 }
 
 .heading {
   font-size: 2rem;
-  margin-bottom: 0.25rem;
+  text-align: center;
+  margin-bottom: 24px;
+  color: #2d3748;
 }
 
-.summary {
-  color: #555;
-  margin-bottom: 1.5rem;
+.status {
+  text-align: center;
+  color: #718096;
+  margin-top: 16px;
 }
 
 .error {
-  color: #c0392b;
-  font-weight: 500;
+  text-align: center;
+  color: #e53e3e;
+  margin-top: 16px;
 }
 ```
-Styles the list page with a centered, readable layout and coloured error text.
+Styles the main container, heading, and status/error messages for `TodoApp`.
 
 ```jsx
 // FILE: frontend/src/components/TodoForm.jsx
-import { useState } from 'react';
-import PropTypes from 'prop-types';
-import { createTodo } from '../services/api';
-import styles from './TodoForm.module.css';
+import React, { useState } from 'react'
+import PropTypes from 'prop-types'
+import { createTodo } from '../services/api'
+import styles from './TodoForm.module.css'
 
 export default function TodoForm({ onCreated }) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [error, setError] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [title, setTitle] = useState('')
+  const [error, setError] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
+    e.preventDefault()
+    if (!title.trim()) return
+    setSubmitting(true)
+    setError(null)
     try {
-      await createTodo({ title, description: description || undefined });
-      setTitle('');
-      setDescription('');
-      onCreated();
+      const todo = await createTodo(title.trim())
+      onCreated(todo)
+      setTitle('')
     } catch (err) {
-      setError(err.message);
+      setError(err.message)
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
   }
 
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
-      <h2 className={styles.heading}>New Todo</h2>
-      {error && <p className={styles.error}>{error}</p>}
-      <label className={styles.label}>
-        Title
-        <input
-          className={styles.input}
-          type="text"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          required
-        />
-      </label>
-      <label className={styles.label}>
-        Description
-        <input
-          className={styles.input}
-          type="text"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-        />
-      </label>
-      <button className={styles.button} type="submit" disabled={submitting}>
-        {submitting ? 'Adding…' : 'Add Todo'}
+      <input
+        className={styles.input}
+        type="text"
+        placeholder="What needs to be done?"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        disabled={submitting}
+      />
+      <button className={styles.button} type="submit" disabled={submitting || !title.trim()}>
+        {submitting ? 'Adding...' : 'Add'}
       </button>
+      {error && <p className={styles.error}>{error}</p>}
     </form>
-  );
+  )
 }
 
 TodoForm.propTypes = {
   onCreated: PropTypes.func.isRequired,
-};
+}
 ```
-Controlled form for creating a new todo; calls `onCreated` after a successful POST so the parent can refresh the list.
+Controlled form that POSTs a new todo to the API and calls `onCreated` with the result; disables the button while submitting.
 
 ```css
 /* FILE: frontend/src/components/TodoForm.module.css */
 .form {
-  background: #f9f9f9;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 1.25rem;
-  margin-bottom: 2rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.heading {
-  font-size: 1.1rem;
-  margin: 0;
-}
-
-.label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.9rem;
-  font-weight: 500;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
 .input {
-  padding: 0.4rem 0.6rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
   font-size: 1rem;
+  outline: none;
+  min-width: 0;
+}
+
+.input:focus {
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.3);
 }
 
 .button {
-  align-self: flex-start;
-  padding: 0.45rem 1rem;
-  background: #2563eb;
-  color: #fff;
+  padding: 10px 20px;
+  background: #4299e1;
+  color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
+  font-size: 1rem;
   cursor: pointer;
-  font-size: 0.95rem;
 }
 
 .button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .error {
-  color: #c0392b;
-  font-size: 0.9rem;
+  width: 100%;
+  color: #e53e3e;
+  font-size: 0.875rem;
+  margin-top: 4px;
 }
 ```
-Styles the creation form as a contained card with a clearly labelled submit button and disabled state.
+Styles the add-todo form with a flexible input and button layout.
 
-```js
-// FILE: frontend/src/propTypes.js
-import PropTypes from 'prop-types';
+```jsx
+// FILE: frontend/src/components/FilterBar.jsx
+import React from 'react'
+import PropTypes from 'prop-types'
+import styles from './FilterBar.module.css'
 
-export const TodoShape = PropTypes.shape({
-  id: PropTypes.number.isRequired,
-  title: PropTypes.string.isRequired,
-  description: PropTypes.string,
-  completed: PropTypes.bool.isRequired,
-  createdAt: PropTypes.string.isRequired,
-  updatedAt: PropTypes.string.isRequired,
-});
+const FILTERS = ['All', 'Active', 'Completed']
+
+export default function FilterBar({ filter, onFilterChange }) {
+  return (
+    <div className={styles.bar}>
+      {FILTERS.map((f) => (
+        <button
+          key={f}
+          className={`${styles.button} ${filter === f ? styles.active : ''}`}
+          onClick={() => onFilterChange(f)}
+        >
+          {f}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+FilterBar.propTypes = {
+  filter: PropTypes.string.isRequired,
+  onFilterChange: PropTypes.func.isRequired,
+}
 ```
-Shared PropType shape for a single todo object, imported by `TodoList` and `TodoItem` to eliminate the duplicated shape definition.
+Renders three filter buttons (All / Active / Completed) and highlights the currently selected one.
+
+```css
+/* FILE: frontend/src/components/FilterBar.module.css */
+.bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.button {
+  padding: 6px 16px;
+  border: 1px solid #cbd5e0;
+  border-radius: 20px;
+  background: white;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: #4a5568;
+  transition: background 0.15s, color 0.15s;
+}
+
+.button:hover {
+  background: #ebf8ff;
+  border-color: #4299e1;
+}
+
+.active {
+  background: #4299e1;
+  color: white;
+  border-color: #4299e1;
+}
+```
+Styles the filter button strip with pill-shaped buttons and an active highlight.
 
 ```jsx
 // FILE: frontend/src/components/TodoList.jsx
-import PropTypes from 'prop-types';
-import TodoItem from './TodoItem';
-import { TodoShape } from '../propTypes';
-import styles from './TodoList.module.css';
+import React from 'react'
+import PropTypes from 'prop-types'
+import TodoItem from './TodoItem'
+import styles from './TodoList.module.css'
 
-export default function TodoList({ todos, onDeleted, onToggled }) {
-  if (todos.length === 0) {
-    return <p className={styles.empty}>No todos yet. Add one above!</p>;
+export default function TodoList({ todos, filter, onToggle, onDelete }) {
+  const filtered = todos.filter((t) => {
+    if (filter === 'Active') return !t.completed
+    if (filter === 'Completed') return t.completed
+    return true
+  })
+
+  if (filtered.length === 0) {
+    return <p className={styles.empty}>No todos here.</p>
   }
 
   return (
     <ul className={styles.list}>
-      {todos.map(todo => (
+      {filtered.map((todo) => (
         <TodoItem
           key={todo.id}
           todo={todo}
-          onDeleted={onDeleted}
-          onToggled={onToggled}
+          onToggle={onToggle}
+          onDelete={onDelete}
         />
       ))}
     </ul>
-  );
+  )
 }
 
 TodoList.propTypes = {
-  todos: PropTypes.arrayOf(TodoShape).isRequired,
-  onDeleted: PropTypes.func.isRequired,
-  onToggled: PropTypes.func.isRequired,
-};
+  todos: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.number.isRequired,
+      title: PropTypes.string.isRequired,
+      completed: PropTypes.bool.isRequired,
+      createdAt: PropTypes.string.isRequired,
+    })
+  ).isRequired,
+  filter: PropTypes.string.isRequired,
+  onToggle: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
+}
 ```
-Renders the ordered list of `TodoItem` components, or an empty-state message when no todos exist.
+Filters the todos array by the active filter and renders a `TodoItem` for each; shows an empty-state message when the list is empty.
 
 ```css
 /* FILE: frontend/src/components/TodoList.module.css */
@@ -382,470 +424,161 @@ Renders the ordered list of `TodoItem` components, or an empty-state message whe
   list-style: none;
   padding: 0;
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
 }
 
 .empty {
-  color: #888;
+  text-align: center;
+  color: #a0aec0;
+  margin-top: 24px;
   font-style: italic;
 }
 ```
-Removes default list styling and stacks items with a consistent gap.
+Resets the list styles and centres the empty-state message.
 
 ```jsx
 // FILE: frontend/src/components/TodoItem.jsx
-import { useState } from 'react';
-import PropTypes from 'prop-types';
-import { Link } from 'react-router-dom';
-import { deleteTodo, updateTodo } from '../services/api';
-import { TodoShape } from '../propTypes';
-import styles from './TodoItem.module.css';
+import React, { useState } from 'react'
+import PropTypes from 'prop-types'
+import { updateTodo, deleteTodo } from '../services/api'
+import styles from './TodoItem.module.css'
 
-export default function TodoItem({ todo, onDeleted, onToggled }) {
-  const [actionError, setActionError] = useState(null);
+export default function TodoItem({ todo, onToggle, onDelete }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
 
-  async function handleDelete() {
-    setActionError(null);
+  async function handleToggle() {
+    setBusy(true)
+    setError(null)
     try {
-      await deleteTodo(todo.id);
-      onDeleted(todo.id);
+      const updated = await updateTodo(todo.id, { completed: !todo.completed })
+      onToggle(updated)
     } catch (err) {
-      setActionError(err.message);
+      setError(err.message)
+    } finally {
+      setBusy(false)
     }
   }
 
-  async function handleToggle() {
-    setActionError(null);
+  async function handleDelete() {
+    setBusy(true)
+    setError(null)
     try {
-      await updateTodo(todo.id, {
-        title: todo.title,
-        description: todo.description ?? null,
-        completed: !todo.completed,
-      });
-      onToggled(todo.id, !todo.completed);
+      await deleteTodo(todo.id)
+      onDelete(todo.id)
     } catch (err) {
-      setActionError(err.message);
+      setError(err.message)
+      setBusy(false)
     }
   }
 
   return (
-    <li className={`${styles.item} ${todo.completed ? styles.done : ''}`}>
+    <li className={styles.item}>
       <input
         type="checkbox"
         className={styles.checkbox}
         checked={todo.completed}
         onChange={handleToggle}
-        aria-label={`Mark "${todo.title}" as ${todo.completed ? 'incomplete' : 'complete'}`}
+        disabled={busy}
       />
-      <div className={styles.body}>
-        <Link className={styles.title} to={`/todos/${todo.id}`}>
-          {todo.title}
-        </Link>
-        {todo.description && (
-          <p className={styles.description}>{todo.description}</p>
-        )}
-        <p className={styles.meta}>
-          Created: {new Date(todo.createdAt).toLocaleString()}
-        </p>
-        {actionError && <p className={styles.actionError}>{actionError}</p>}
-      </div>
-      <button className={styles.deleteBtn} onClick={handleDelete} aria-label="Delete todo">
-        Delete
+      <span className={`${styles.title} ${todo.completed ? styles.done : ''}`}>
+        {todo.title}
+      </span>
+      <button
+        className={styles.deleteBtn}
+        onClick={handleDelete}
+        disabled={busy}
+        aria-label="Delete todo"
+      >
+        ✕
       </button>
+      {error && <span className={styles.error}>{error}</span>}
     </li>
-  );
+  )
 }
 
 TodoItem.propTypes = {
-  todo: TodoShape.isRequired,
-  onDeleted: PropTypes.func.isRequired,
-  onToggled: PropTypes.func.isRequired,
-};
+  todo: PropTypes.shape({
+    id: PropTypes.number.isRequired,
+    title: PropTypes.string.isRequired,
+    completed: PropTypes.bool.isRequired,
+    createdAt: PropTypes.string.isRequired,
+  }).isRequired,
+  onToggle: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
+}
 ```
-Displays a single todo with a completion checkbox, a link to its detail page, and a delete button; calls the appropriate parent callbacks after each mutation.
+Renders a single todo row with a checkbox for toggling completion and a delete button; calls the appropriate API endpoints on interaction.
 
 ```css
 /* FILE: frontend/src/components/TodoItem.module.css */
 .item {
   display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  background: #fff;
-}
-
-.item.done {
-  opacity: 0.55;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 8px;
+  border-bottom: 1px solid #edf2f7;
 }
 
 .checkbox {
-  margin-top: 0.2rem;
-  width: 1rem;
-  height: 1rem;
+  width: 18px;
+  height: 18px;
   cursor: pointer;
   flex-shrink: 0;
-}
-
-.body {
-  flex: 1;
 }
 
 .title {
-  font-weight: 600;
-  color: #1d4ed8;
-  text-decoration: none;
+  flex: 1;
+  font-size: 1rem;
+  color: #2d3748;
+  word-break: break-word;
 }
 
-.title:hover {
-  text-decoration: underline;
-}
-
-.description {
-  margin: 0.2rem 0 0;
-  font-size: 0.88rem;
-  color: #555;
-}
-
-.meta {
-  margin: 0.25rem 0 0;
-  font-size: 0.78rem;
-  color: #999;
+.done {
+  text-decoration: line-through;
+  color: #a0aec0;
 }
 
 .deleteBtn {
-  padding: 0.3rem 0.7rem;
-  background: #ef4444;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  flex-shrink: 0;
-}
-
-.deleteBtn:hover {
-  background: #dc2626;
-}
-
-.actionError {
-  margin: 0.25rem 0 0;
-  font-size: 0.82rem;
-  color: #c0392b;
-}
-```
-Styles each todo as a card row with a muted appearance when completed and a red delete button.
-
-```jsx
-// FILE: frontend/src/components/TodoDetailPage.jsx
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { getTodo, deleteTodo } from '../services/api';
-import TodoEditForm from './TodoEditForm';
-import styles from './TodoDetailPage.module.css';
-
-export default function TodoDetailPage() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [todo, setTodo] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    getTodo(id)
-      .then(data => { if (!cancelled) setTodo(data); })
-      .catch(err => { if (!cancelled) setError(err.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [id]);
-
-  async function handleDelete() {
-    try {
-      await deleteTodo(id);
-      navigate('/');
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  if (loading) return <p className={styles.loading}>Loading...</p>;
-  if (error) return <p className={styles.error}>{error}</p>;
-
-  return (
-    <div className={styles.page}>
-      <button className={styles.back} onClick={() => navigate('/')}>
-        ← Back to list
-      </button>
-      <h1 className={styles.title}>{todo.title}</h1>
-      <p className={styles.meta}>
-        Created: {new Date(todo.createdAt).toLocaleString()} &nbsp;|&nbsp;
-        Updated: {new Date(todo.updatedAt).toLocaleString()}
-      </p>
-      <p className={styles.status}>
-        Status: <strong>{todo.completed ? 'Completed' : 'Incomplete'}</strong>
-      </p>
-      {todo.description && (
-        <p className={styles.description}>{todo.description}</p>
-      )}
-      <TodoEditForm todo={todo} onUpdated={setTodo} />
-      <button className={styles.deleteBtn} onClick={handleDelete}>
-        Delete Todo
-      </button>
-    </div>
-  );
-}
-```
-Fetches a single todo by URL param on mount, renders its details and an inline edit form, and navigates back to `/` after deletion.
-
-```css
-/* FILE: frontend/src/components/TodoDetailPage.module.css */
-.page {
-  max-width: 640px;
-  margin: 2rem auto;
-  padding: 0 1rem;
-}
-
-.back {
   background: none;
   border: none;
-  color: #2563eb;
+  color: #fc8181;
+  font-size: 1rem;
   cursor: pointer;
-  font-size: 0.95rem;
-  padding: 0;
-  margin-bottom: 1rem;
-}
-
-.back:hover {
-  text-decoration: underline;
-}
-
-.title {
-  font-size: 1.8rem;
-  margin: 0 0 0.25rem;
-}
-
-.meta {
-  font-size: 0.82rem;
-  color: #999;
-  margin-bottom: 0.5rem;
-}
-
-.loading {
-  padding: 2rem;
-  text-align: center;
-  color: #555;
-}
-
-.status {
-  margin-bottom: 0.5rem;
-}
-
-.description {
-  color: #444;
-  margin-bottom: 1.5rem;
-}
-
-.error {
-  color: #c0392b;
-  font-weight: 500;
-}
-
-.deleteBtn {
-  margin-top: 1.5rem;
-  padding: 0.45rem 1rem;
-  background: #ef4444;
-  color: #fff;
-  border: none;
+  padding: 4px 8px;
   border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.95rem;
+  flex-shrink: 0;
 }
 
 .deleteBtn:hover {
-  background: #dc2626;
-}
-```
-Styles the detail page with a back link, readable type hierarchy, and a destructive delete button at the bottom.
-
-```jsx
-// FILE: frontend/src/components/TodoEditForm.jsx
-import { useState, useEffect } from 'react';
-import PropTypes from 'prop-types';
-import { updateTodo } from '../services/api';
-import styles from './TodoEditForm.module.css';
-
-export default function TodoEditForm({ todo, onUpdated }) {
-  const [title, setTitle] = useState(todo.title);
-  const [description, setDescription] = useState(todo.description ?? '');
-  const [completed, setCompleted] = useState(todo.completed);
-  const [error, setError] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => { setSaved(false); }, [todo.id]);
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError(null);
-    setSaved(false);
-    setSubmitting(true);
-    try {
-      const updated = await updateTodo(todo.id, {
-        title,
-        description: description || null,
-        completed,
-      });
-      onUpdated(updated);
-      setSaved(true);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <form className={styles.form} onSubmit={handleSubmit}>
-      <h2 className={styles.heading}>Edit Todo</h2>
-      {error && <p className={styles.error}>{error}</p>}
-      {saved && <p className={styles.success}>Saved!</p>}
-      <label className={styles.label}>
-        Title
-        <input
-          className={styles.input}
-          type="text"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          required
-        />
-      </label>
-      <label className={styles.label}>
-        Description
-        <input
-          className={styles.input}
-          type="text"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-        />
-      </label>
-      <label className={styles.checkLabel}>
-        <input
-          type="checkbox"
-          checked={completed}
-          onChange={e => setCompleted(e.target.checked)}
-        />
-        Completed
-      </label>
-      <button className={styles.button} type="submit" disabled={submitting}>
-        {submitting ? 'Saving…' : 'Save Changes'}
-      </button>
-    </form>
-  );
+  background: #fff5f5;
 }
 
-TodoEditForm.propTypes = {
-  todo: PropTypes.shape({
-    id: PropTypes.number.isRequired,
-    title: PropTypes.string.isRequired,
-    description: PropTypes.string,
-    completed: PropTypes.bool.isRequired,
-  }).isRequired,
-  onUpdated: PropTypes.func.isRequired,
-};
-```
-Pre-populated edit form that issues a PUT on submit and calls `onUpdated` with the returned todo so the parent can reflect changes immediately.
-
-```css
-/* FILE: frontend/src/components/TodoEditForm.module.css */
-.form {
-  background: #f0f4ff;
-  border: 1px solid #c7d2fe;
-  border-radius: 6px;
-  padding: 1.25rem;
-  margin-top: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.heading {
-  font-size: 1.1rem;
-  margin: 0;
-}
-
-.label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.input {
-  padding: 0.4rem 0.6rem;
-  border: 1px solid #a5b4fc;
-  border-radius: 4px;
-  font-size: 1rem;
-}
-
-.checkLabel {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.button {
-  align-self: flex-start;
-  padding: 0.45rem 1rem;
-  background: #4f46e5;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.95rem;
-}
-
-.button:disabled {
-  opacity: 0.6;
+.deleteBtn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .error {
-  color: #c0392b;
-  font-size: 0.9rem;
-}
-
-.success {
-  color: #16a34a;
-  font-size: 0.9rem;
-  font-weight: 500;
+  color: #e53e3e;
+  font-size: 0.75rem;
+  width: 100%;
 }
 ```
-Styles the edit form with a blue-tinted background to visually distinguish it from the creation form, with success and error feedback.
+Styles the individual todo row with a flexible layout, strikethrough for completed items, and a red delete button.
 
 ```css
 /* FILE: frontend/src/index.css */
-*,
-*::before,
-*::after {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: #f3f4f6;
-  color: #111827;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+  background-color: #f7fafc;
+  color: #2d3748;
   line-height: 1.5;
 }
 ```
-Global CSS reset and base body styles applied before any component styles are loaded.
+Global CSS reset and base body styles applied to the entire application.

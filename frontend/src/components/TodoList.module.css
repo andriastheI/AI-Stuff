@@ -1,0 +1,12 @@
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.empty {
+  text-align: center;
+  color: #a0aec0;
+  margin-top: 24px;
+  font-style: italic;
+}
