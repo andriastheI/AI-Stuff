@@ -1,183 +1,92 @@
-## Third-Pass Review — Full Audit
+## Fourth-Pass Review — Final Audit
 
 ---
 
 ## Contract Audit
 
-### GET /api/todos
-- Backend: `get { }` inside `route("/api/todos")` ✅
-- Frontend: `fetch('/api/todos')` ✅
-- Response shape: `id, title, description, completed, createdAt, updatedAt` — matches on both sides ✅
-- **OK: GET /api/todos**
+- **OK: GET /api/todos** — path, method, and response shape match ✅
+- **OK: GET /api/todos/{id}** — 200 / 400 / 404 all handled ✅
+- **OK: POST /api/todos** — returns 201, blank title rejected ✅
+- **OK: PUT /api/todos/{id}** — partial updates work, description clearable ✅
+- **OK: DELETE /api/todos/{id}** — returns 204, 404 on missing ✅
 
-### GET /api/todos/{id}
-- Backend: `get("/{id}") { }` ✅
-- Frontend: `` fetch(`/api/todos/${id}`) `` ✅
-- Status codes: 200 / 400 / 404 all handled ✅
-- **OK: GET /api/todos/{id}**
-
-### POST /api/todos
-- Backend: `post { }`, returns 201 ✅
-- Frontend: POST with `Content-Type: application/json` ✅
-- Request body `{ title, description, completed }` matches `CreateTodo` ✅
-- **OK: POST /api/todos**
-
-### PUT /api/todos/{id}
-- Backend: `put("/{id}") { }` ✅
-- Frontend: PUT with `Content-Type: application/json` ✅
-- Validation: `&&` operator correctly rejects only empty body ✅
-- Description update: unconditional `it[description] = body.description` ✅
-- **OK: PUT /api/todos/{id}**
-
-### DELETE /api/todos/{id}
-- Backend: `delete("/{id}") { }`, returns 204 ✅
-- Frontend: DELETE with correct status handling ✅
-- Status codes: 204 / 400 / 404 all handled ✅
-- **OK: DELETE /api/todos/{id}**
+No mismatches.
 
 ---
 
 ## Frontend Review
 
-### App
-- Both routes defined correctly (`/` and `/todos/:id`) ✅
-- No props, no PropTypes needed ✅
+### App ✅
+Two routes defined correctly. No props, no PropTypes needed.
 
-### TodoListPage
-- `prop-types` import removed ✅
-- Loading state: `{loading && <p>Loading...</p>}` ✅
-- Error state: `{error && <p className={styles.error}>{error}</p>}` ✅
-- Summary hidden during loading and error ✅
+### TodoListPage ✅
+Loading and error states handled. No unused imports. Summary hidden during load/error.
 
-### TodoForm
-- `PropTypes.func.isRequired` defined for `onCreated` ✅
-- Error and submitting states handled ✅
-- Sends `description: description || undefined` (omits key when blank — correct for POST) ✅
+### TodoForm ✅
+PropTypes defined. Error and submitting states handled. Sends `description: description || undefined` (omits key when blank, correct for POST).
 
-### propTypes.js *(new file)*
-- `TodoShape` exported and imported correctly by both `TodoList` and `TodoItem` ✅
-- Eliminates the previous duplicated shape definition ✅
+### propTypes.js ✅
+Shared `TodoShape` imported by both `TodoList` and `TodoItem`. No duplication.
 
-### TodoList
-- Uses `PropTypes.arrayOf(TodoShape)` ✅
-- Empty state message rendered ✅
+### TodoList ✅
+Uses `PropTypes.arrayOf(TodoShape)`. Empty-state message rendered.
 
-### TodoItem ❌
-- Inline `actionError` state replaces `alert()` ✅
+### TodoItem ✅
+- Inline `actionError` state replaces the old `alert()` ✅
+- `handleToggle` now sends `{ title: todo.title, description: todo.description ?? null, completed: !todo.completed }` — description is preserved on every toggle ✅
 - Uses `TodoShape.isRequired` ✅
-- **`handleToggle` still sends only `{ completed: !todo.completed }` — bug not fixed.**
-  The backend now writes `it[description] = body.description` unconditionally. Since
-  `description` is not included in the toggle payload, Kotlin deserialises it as `null`
-  (the `UpdateTodo` default), and the column is set to `NULL`. Any todo with a description
-  loses it silently on the first checkbox click.
 
-### TodoDetailPage
-- `styles.loading` used for the loading spinner (no longer ambiguous with `styles.status`) ✅
-- Cancellation guard (`cancelled` flag) prevents setState on unmount ✅
-- Loading and error states handled ✅
+### TodoDetailPage ✅
+`styles.loading` used for spinner. Cancellation guard present. Loading and error states handled.
 
-### TodoEditForm
-- `useEffect(() => { setSaved(false); }, [todo.id])` resets the "Saved!" banner ✅
-- Error, submitting, and saved states all handled ✅
-- Sends all three fields (`title`, `description`, `completed`) on submit — correct ✅
+### TodoEditForm ✅
+`useEffect(() => { setSaved(false); }, [todo.id])` resets the "Saved!" banner. Sends all three fields on submit.
 
-**Frontend Quality: 4/5** — One remaining data-loss bug in `TodoItem.handleToggle`; everything else is clean.
+**Frontend Quality: 5/5** — All issues resolved. Clean component structure with consistent error/loading handling and no PropTypes violations.
 
 ---
 
 ## Backend Review
 
-### GET /api/todos
-- `Todos.selectAll().map { rowToTodo(it) }` inside `transaction { }` ✅
-- Returns 200 with list ✅
-- try/catch ✅
+### GET /api/todos ✅
+`selectAll().map { rowToTodo(it) }` in transaction. Returns 200. try/catch present.
 
-### GET /api/todos/{id}
-- `toIntOrNull()` guard returns 400 on bad id ✅
-- `singleOrNull()` returns 404 on missing record ✅
-- try/catch ✅
+### GET /api/todos/{id} ✅
+`toIntOrNull()` returns 400 on bad id. `singleOrNull()` returns 404 on missing. try/catch present.
 
-### POST /api/todos
-- `body.title.isBlank()` correctly rejects whitespace-only titles ✅
-- Returns 201 with created todo ✅
-- try/catch ✅
+### POST /api/todos ✅
+`isBlank()` rejects whitespace-only titles. Returns 201. try/catch present.
 
-### PUT /api/todos/{id}
-- `body.title == null && body.description == null && body.completed == null` correctly
-  returns 400 only when body is completely empty ✅
-- `body.title?.let { t -> it[title] = t }` — title conditionally updated ✅
-- `it[description] = body.description` — description always written, enabling null-clear ✅
-- `body.completed?.let { c -> it[completed] = if (c) 1 else 0 }` — completed conditionally updated ✅
-- Returns 200 with re-fetched row, 404 when not found ✅
-- try/catch ✅
+### PUT /api/todos/{id} ✅
+`&&` operator correctly returns 400 only on empty body. Title and completed updated conditionally via `?.let`. Description written unconditionally (`it[description] = body.description`) so it can be cleared. Returns 200 with re-fetched row. try/catch present.
 
-### DELETE /api/todos/{id}
-- Existence check before delete returns 404 correctly ✅
-- Returns 204 on success ✅
-- try/catch ✅
+### DELETE /api/todos/{id} ✅
+Existence check before delete. Returns 204 on success, 404 when not found. try/catch present.
 
-**Backend Quality: 5/5** — All routes fully implemented with correct status codes, Exposed transactions, and error handling. No issues.
+**Backend Quality: 5/5** — All routes correct. No issues.
 
 ---
 
 ## Priority 1 — Fix Before Running
 
-```
-File: frontend/src/components/TodoItem.jsx  (handleToggle)
-Issue: Toggle only sends { completed: !todo.completed } to the PUT endpoint.
-       The backend unconditionally writes body.description to the DB column.
-       Since description is absent from the payload, Kotlin defaults it to null,
-       silently erasing the description of any todo that has one.
-
-Fix:
-
-Before:
-  await updateTodo(todo.id, { completed: !todo.completed });
-
-After:
-  await updateTodo(todo.id, {
-    title: todo.title,
-    description: todo.description,
-    completed: !todo.completed,
-  });
-```
+No issues. All resolved.
 
 ---
 
 ## Priority 2 — Fix Before Shipping
 
-No issues. All previous Priority 2 items are resolved.
+No issues. All resolved.
 
 ---
 
 ## Priority 3 — Nice to Have
 
-- **`Application.kt`** — `allowHost("localhost:5173")` is hardcoded. Add an environment
-  variable fallback so staging and production deployments don't require a code change.
+- **`Application.kt`** — `allowHost("localhost:5173")` is hardcoded. Read from an environment variable so staging and production don't require a code change.
 
-- **`TodoDetailPage.jsx`** — `<TodoEditForm>` has no `key` prop. React will reuse the
-  same component instance if the parent rerenders without a route change. Adding
-  `key={todo.id}` guarantees a clean remount with fresh local state whenever a different
-  todo is loaded.
+- **`TodoDetailPage.jsx`** — `<TodoEditForm>` has no `key` prop. Adding `key={todo.id}` guarantees a clean remount with fresh local state if the component instance is ever reused across different todos (safe today due to route-based navigation, but fragile if routing changes).
 
 ---
 
-## Quick Win
+## Summary
 
-One line in `TodoItem.jsx` — include the current todo fields in the toggle call:
-
-**Before:**
-```js
-await updateTodo(todo.id, { completed: !todo.completed });
-```
-
-**After:**
-```js
-await updateTodo(todo.id, {
-  title: todo.title,
-  description: todo.description,
-  completed: !todo.completed,
-});
-```
-
-No backend change needed. Fixes the description data-loss bug in under two minutes.
+All Priority 1 and Priority 2 issues from the original review are fixed. The app is ready to run. The two Priority 3 items above are polish — neither will cause a bug under normal use.

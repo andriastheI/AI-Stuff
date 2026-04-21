@@ -419,7 +419,11 @@ export default function TodoItem({ todo, onDeleted, onToggled }) {
   async function handleToggle() {
     setActionError(null);
     try {
-      await updateTodo(todo.id, { completed: !todo.completed });
+      await updateTodo(todo.id, {
+        title: todo.title,
+        description: todo.description ?? null,
+        completed: !todo.completed,
+      });
       onToggled(todo.id, !todo.completed);
     } catch (err) {
       setActionError(err.message);
