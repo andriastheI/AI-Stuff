@@ -6,7 +6,7 @@ import org.jetbrains.exposed.dao.id.IntIdTable
 object Todos : IntIdTable("todos") {
     val title = varchar("title", 512)
     val completed = bool("completed").default(false)
-    val createdAt = varchar("created_at", 64).default("")
+    val createdAt = varchar("created_at", 64).clientDefault { java.time.Instant.now().toString() }
 }
 
 @Serializable

@@ -63,8 +63,7 @@ fun Application.todoRoutes() {
                             createdAt = now,
                         )
                     }
-                    // Intentional bug: returns 200 instead of the required 201
-                    call.respond(HttpStatusCode.OK, todo)
+                    call.respond(HttpStatusCode.Created, todo)
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Unexpected error: ${e.message}"))
                 }
