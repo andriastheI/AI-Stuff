@@ -57,6 +57,23 @@ Fix: Change `.default("")` to `.clientDefault { java.time.Instant.now().toString
      so every row gets a real timestamp even when inserted without an explicit value.
 ```
 
+```
+File: backend/src/main/kotlin/com/app/routes/TodoRoutes.kt
+Issue: Exposed 0.55.0 removed the `select { condition }` DSL — it is now a hard compiler error.
+       Four usages in GET /{id}, PUT /{id} (×2), and DELETE /{id} all fail to compile.
+Fix: Replace every `Todos.select { Todos.id eq id }` with `Todos.selectAll().where { Todos.id eq id }`.
+     Four occurrences on lines 78, 112, 118, and 143.
+```
+
+```
+File: backend/ (project root)
+Issue: Gradle wrapper scripts (gradlew, gradlew.bat, gradle-wrapper.jar) were not generated.
+       Without them the project cannot be built on any machine that does not have Gradle
+       installed globally, and the documented `./gradlew run` command fails immediately.
+Fix: Run `gradle wrapper --gradle-version 8.10` once inside the backend/ directory to
+     generate gradlew, gradlew.bat, and gradle/wrapper/gradle-wrapper.jar.
+```
+
 ---
 
 ## Priority 2 — Fix Before Shipping
@@ -78,6 +95,15 @@ Fix: Create frontend/index.html:
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+```
+
+```
+File: frontend/package.json
+Issue: `prop-types` is imported by every component file but is not listed as a dependency.
+       `npm run dev` starts successfully but Vite throws a module-not-found error at runtime
+       as soon as any component is rendered.
+Fix: Add `"prop-types": "^15.8.1"` to the `dependencies` section of frontend/package.json
+     and re-run `npm install`.
 ```
 
 ```

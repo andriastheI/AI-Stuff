@@ -75,7 +75,7 @@ fun Application.todoRoutes() {
                     val id = call.parameters["id"]?.toIntOrNull()
                         ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid id"))
                     val todo = transaction {
-                        Todos.select { Todos.id eq id }.firstOrNull()?.let { row ->
+                        Todos.selectAll().where { Todos.id eq id }.firstOrNull()?.let { row ->
                             Todo(
                                 id = row[Todos.id].value,
                                 title = row[Todos.title],
@@ -109,13 +109,13 @@ fun Application.todoRoutes() {
                         return@put
                     }
                     val updated = transaction {
-                        val existing = Todos.select { Todos.id eq id }.firstOrNull()
+                        val existing = Todos.selectAll().where { Todos.id eq id }.firstOrNull()
                             ?: return@transaction null
                         Todos.update({ Todos.id eq id }) {
                             if (body.title != null) it[title] = body.title
                             if (body.completed != null) it[completed] = body.completed
                         }
-                        Todos.select { Todos.id eq id }.first().let { row ->
+                        Todos.selectAll().where { Todos.id eq id }.first().let { row ->
                             Todo(
                                 id = row[Todos.id].value,
                                 title = row[Todos.title],
@@ -140,7 +140,7 @@ fun Application.todoRoutes() {
                     val id = call.parameters["id"]?.toIntOrNull()
                         ?: return@delete call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid id"))
                     val deleted = transaction {
-                        val existing = Todos.select { Todos.id eq id }.firstOrNull()
+                        val existing = Todos.selectAll().where { Todos.id eq id }.firstOrNull()
                             ?: return@transaction false
                         Todos.deleteWhere { Todos.id eq id }
                         true
